@@ -191,10 +191,15 @@ fn main() -> Result<(), anyhow::Error> {
                     match status.is_dirty() {
                         Some(true) => "dirty".yellow().bold(),
                         Some(false) => "clean".green().bold(),
-                        None => "unknown".dimmed().bold(),
+                        None if submodule.state()?.repository_exists => "unknown".bold(),
+                        None => "uninitialized".dimmed().bold(),
                     }
                 );
                 if let Some(changes) = status.changes {
+                    if !changes.is_empty() {
+                        println!("  changes:");
+                    }
+
                     for change in changes {
                         display_change(&change)?;
                     }
