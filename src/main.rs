@@ -2,8 +2,11 @@
 
 use camino::Utf8PathBuf;
 use clap::Parser;
-use colored::Colorize;
+use colored::{ColoredString, Colorize};
 use gix::bstr::ByteSlice;
+use gix::status::index_worktree::iter::{Item, RewriteSource};
+use gix::status::plumbing::index_as_worktree::EntryStatus;
+use gix::submodule::config::Ignore;
 use gix::Url;
 use itertools::Itertools;
 use std::process::Command;
@@ -25,6 +28,7 @@ enum Subcommand {
         path: Option<Utf8PathBuf>,
     },
     Ls,
+    Status,
 }
 
 // Tries to use the last component of the path as the name of the submodule.
@@ -34,6 +38,67 @@ fn format_name(name: &str) -> &str {
         .or(name.rsplit_once('\\'))
         .map(|(_, name)| name)
         .unwrap_or(name)
+}
+
+fn display_name(submodule: &gix::Submodule) -> Result<ColoredString, anyhow::Error> {
+    let state = submodule.state()?;
+    if state.repository_exists {
+        Ok(format_name(&submodule.name().to_str_lossy()).blue().bold())
+    } else {
+        Ok(format_name(&submodule.name().to_str_lossy()).bold())
+    }
+}
+
+fn display_change(change: &Item) -> Result<(), anyhow::Error> {
+    match change {
+        Item::Modification {
+            rela_path, status, ..
+        } => {
+            let name = match status {
+                EntryStatus::Conflict(_) => rela_path.to_str_lossy().bold().red(),
+                EntryStatus::Change(_) | EntryStatus::IntentToAdd => {
+                    rela_path.to_str_lossy().bold().yellow()
+                }
+                EntryStatus::NeedsUpdate(_) => return Ok(()),
+            };
+            println!("    {}", name);
+        }
+        Item::DirectoryContents { entry, .. } => {
+            // We're assuming it's untracked
+            println!("    {}", entry.rela_path.to_str_lossy().red());
+        }
+        Item::Rewrite {
+            source:
+                RewriteSource::RewriteFromIndex {
+                    source_rela_path, ..
+                },
+            dirwalk_entry,
+            ..
+        } => {
+            println!(
+                "    {} -> {}",
+                source_rela_path.to_str_lossy().bold(),
+                dirwalk_entry.rela_path.to_str_lossy().bold()
+            );
+        }
+        Item::Rewrite {
+            source:
+                RewriteSource::CopyFromDirectoryEntry {
+                    source_dirwalk_entry,
+                    ..
+                },
+            dirwalk_entry,
+            ..
+        } => {
+            println!(
+                "    {} -> {}",
+                source_dirwalk_entry.rela_path.to_str_lossy().bold(),
+                dirwalk_entry.rela_path.to_str_lossy().bold()
+            );
+        }
+    }
+
+    Ok(())
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -88,16 +153,10 @@ fn main() -> Result<(), anyhow::Error> {
                 return Ok(());
             };
             for submodule in submodules.sorted_by(|a, b| a.name().cmp(b.name())) {
-                let state = submodule.state()?;
-                let name = if state.repository_exists {
-                    format_name(&submodule.name().to_str_lossy()).blue().bold()
-                } else {
-                    format_name(&submodule.name().to_str_lossy()).bold()
-                };
                 println!(
                     "{} {} {} {}",
                     "initialized".bold(),
-                    name,
+                    display_name(&submodule)?,
                     "at".bold(),
                     submodule.path()?.to_str_lossy().dimmed().bold()
                 );
@@ -110,13 +169,36 @@ fn main() -> Result<(), anyhow::Error> {
                 return Ok(());
             };
             for submodule in submodules.sorted_by(|a, b| a.name().cmp(b.name())) {
-                let state = submodule.state()?;
-                let name = if state.repository_exists {
-                    format_name(&submodule.name().to_str_lossy()).blue().bold()
-                } else {
-                    format_name(&submodule.name().to_str_lossy()).bold()
-                };
-                println!("{} {}", name, submodule.path()?.to_str_lossy().dimmed());
+                println!(
+                    "{} {}",
+                    display_name(&submodule)?,
+                    submodule.path()?.to_str_lossy().dimmed()
+                );
+            }
+        }
+        Subcommand::Status => {
+            let repo = gix::discover(cwd)?;
+            let Some(submodules) = repo.submodules()? else {
+                println!("No submodules found");
+                return Ok(());
+            };
+            for submodule in submodules.sorted_by(|a, b| a.name().cmp(b.name())) {
+                let status = submodule.status(Ignore::None, false)?;
+                println!(
+                    "{} {} {}",
+                    display_name(&submodule)?,
+                    submodule.path()?.to_str_lossy().dimmed(),
+                    match status.is_dirty() {
+                        Some(true) => "dirty".yellow().bold(),
+                        Some(false) => "clean".green().bold(),
+                        None => "unknown".dimmed().bold(),
+                    }
+                );
+                if let Some(changes) = status.changes {
+                    for change in changes {
+                        display_change(&change)?;
+                    }
+                }
             }
         }
     }
