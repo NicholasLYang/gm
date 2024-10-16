@@ -22,12 +22,18 @@ struct Args {
 
 #[derive(Parser)]
 enum Subcommand {
-    // TODO: Print the submodules in nice colors
+    /// Clone a repository with submodules
     Clone {
         url: String,
         path: Option<Utf8PathBuf>,
     },
+    /// Remove a submodule
+    Rm { path: Utf8PathBuf },
+    /// Initialize submodules
+    Init,
+    /// List submodules
     Ls,
+    /// Show submodules and their changed files
     Status,
 }
 
@@ -111,7 +117,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     match args.command {
         Subcommand::Clone { url, path } => {
-            let git = which::which("git").unwrap();
+            let git = which::which("git")?;
             let mut command = Command::new(git);
 
             command
@@ -161,6 +167,31 @@ fn main() -> Result<(), anyhow::Error> {
                     submodule.path()?.to_str_lossy().dimmed().bold()
                 );
             }
+        }
+        Subcommand::Init => {
+            let git = which::which("git")?;
+            Command::new(&git)
+                .arg("submodule")
+                .arg("init")
+                .current_dir(&cwd)
+                .spawn()?
+                .wait()?;
+
+            Command::new(&git)
+                .arg("submodule")
+                .arg("update")
+                .current_dir(&cwd)
+                .spawn()?
+                .wait()?;
+        }
+        Subcommand::Rm { path } => {
+            let git = which::which("git")?;
+            Command::new(&git)
+                .arg("rm")
+                .arg(path)
+                .current_dir(&cwd)
+                .spawn()?
+                .wait()?;
         }
         Subcommand::Ls => {
             let repo = gix::discover(cwd)?;
