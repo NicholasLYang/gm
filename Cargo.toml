@@ -3,6 +3,7 @@ name = "gm"
 license = "MIT"
 version = "0.1.0"
 edition = "2021"
+repository = "https//github.com/nicholaslyang/gm"
 
 [dependencies]
 anyhow = "1.0.89"

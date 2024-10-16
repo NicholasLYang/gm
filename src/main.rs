@@ -31,6 +31,8 @@ enum Subcommand {
     Rm { path: Utf8PathBuf },
     /// Initialize submodules
     Init,
+    /// Pull and update submodules
+    Pull { args: Vec<String> },
     /// List submodules
     Ls,
     /// Show submodules and their changed files
@@ -189,6 +191,24 @@ fn main() -> Result<(), anyhow::Error> {
             Command::new(&git)
                 .arg("rm")
                 .arg(path)
+                .current_dir(&cwd)
+                .spawn()?
+                .wait()?;
+        }
+        Subcommand::Pull { args } => {
+            let git = which::which("git")?;
+            Command::new(&git)
+                .arg("pull")
+                .args(args)
+                .current_dir(&cwd)
+                .spawn()?
+                .wait()?;
+
+            Command::new(&git)
+                .arg("submodule")
+                .arg("update")
+                .arg("--init")
+                .arg("--recursive")
                 .current_dir(&cwd)
                 .spawn()?
                 .wait()?;

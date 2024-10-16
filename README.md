@@ -6,7 +6,8 @@ A nicer wrapper for git submodules.
 
 - [x] Print the submodules in nice colors
 - [x] Add a `ls` subcommand
-- [ ] Add a `pull` subcommand
+- [x] Add a `pull` subcommand
 - [ ] Add a `push` subcommand
-- [ ] Add a `status` subcommand
+- [x] Add a `status` subcommand
 - [ ] Add a `add` subcommand
+- [ ] Add helpers for merge conflicts in submodules
